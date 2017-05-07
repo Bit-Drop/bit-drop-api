@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node --harmony ./bit-drop-api.js"
+  },
   "dependencies": {
     "express": "^4.15.2",
-    "jimp": "^0.2.27"
+    "jimp": "^0.2.27",
+    "node-env-file": "^0.1.8"
   }
 }
