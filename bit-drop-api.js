@@ -8,20 +8,19 @@ const express = require('express')
 const app = express()
 const bodyParser = require('body-parser')
 const db = require('./utils/DbPool')
-const _ = require('lodash')
 
-const Tile = require('./controllers/tile')
+const Tile = require('./controllers/Tile')
 
 app.get('/', (req, res) => {
   res.send('Hello!')
 })
 
 app.get('/tiles/:zoom/:x/:y.png', (req, res) => {
-  Tile(req, res)
+  Tile.get(db, req, res)
 })
 
 app.post('/set-tile', bodyParser.json(), (req, res) => {
-  res.json(_.defaults(req.body, { success: true }))
+  Tile.set(db, req, res)
 })
 
 app.listen(process.env.PORT, () => {
