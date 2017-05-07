@@ -1,6 +1,7 @@
 const fs = require('fs')
 const Jimp = require('jimp')
 const async = require('async')
+const { isInt } = require('../../utils/Utils')
 
 const MIN_ZOOM = 12
 const MAX_ZOOM = 16
@@ -27,14 +28,6 @@ function createImage(data) {
   var image = new Jimp(size, size)
   image.bitmap.data = Buffer.from(data)
   return image
-}
-
-function isInt(value) {
-  if (isNaN(value)) {
-    return false;
-  }
-  var x = parseFloat(value);
-  return (x | 0) === x;
 }
 
 function resize256(image) {
@@ -119,7 +112,6 @@ function findTile(db, z, x, y, tile, cb) {
       if (err) {
         return cb(null, tile)
       }
-      console.log(JSON.stringify(results, null, 2))
       const size = results.tl.bitmap.width * 2
       const image = new Jimp(size, size)
       image.composite(results.tl, 0, 0)
