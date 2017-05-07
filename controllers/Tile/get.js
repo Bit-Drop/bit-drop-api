@@ -1,22 +1,28 @@
-var fs = require('fs')
-var Jimp = require('jimp')
+const fs = require('fs')
+const Jimp = require('jimp')
+const async = require('async')
 
-var min_zoom = 12
-var max_zoom = 16
-var tiles = {
-  16: {
-    39106: {
-      26593: [255, 0, 255, 160],
-      26594: [255, 0, 0, 160]
-    },
-    39107: {
-      26593: [0, 0, 255, 160],
-      26594: [0, 255, 0, 160]
+const MIN_ZOOM = 12
+const MAX_ZOOM = 16
+const EMPTY_TILE = [255, 255, 255, 0]
+
+function getDbTile(db, z, x, y, cb) {
+  db.query('SELECT * FROM tiles WHERE id=$1 LIMIT 1', [`${z}-${x}-${y}`], (err, result) => {
+    if (err) {
+      console.error(err)
+      return cb(err)
+    } else if (err || result.rowCount !== 1) {
+      return cb(new Error('Tile not found'))
+    } else {
+      return cb(null, result.rows[0].data)
     }
-  }
+  })
 }
 
 function createImage(data) {
+  if (!data) {
+    data = EMPTY_TILE
+  }
   var size = Math.sqrt(data.length / 4)
   var image = new Jimp(size, size)
   image.bitmap.data = Buffer.from(data)
@@ -65,59 +71,92 @@ function resize256(image) {
   }
 }
 
-function findTile(z, x, y, tile) {
+function findTile(db, z, x, y, tile, cb) {
   if (!tile) {
-    tile = [255, 255, 255, 0]
+    tile = EMPTY_TILE
   }
-  if (z === max_zoom) {
-    if (tiles[z] && tiles[z][x] && tiles[z][x][y]) {
-      tile = tiles[z][x][y]
-    }
-    return tile
-  } else if (z > max_zoom) {
+
+  if (z === MAX_ZOOM) {
+    getDbTile(db, z, x, y, function(err, dbTile) {
+      cb(null, err ? tile : dbTile)
+    })
+
+  } else if (z > MAX_ZOOM) {
     // Zooming out
-    var d = Math.pow(2, z - max_zoom)
-    if (tiles[max_zoom] && tiles[max_zoom][Math.floor(x/d)] && tiles[max_zoom][Math.floor(x/d)][Math.floor(y/d)]) {
-      tile = tiles[max_zoom][Math.floor(x/d)][Math.floor(y/d)]
-    }
-  } else if (z >= min_zoom ) {
+    var d = Math.pow(2, z - MAX_ZOOM)
+    getDbTile(db, MAX_ZOOM, Math.floor(x/d), Math.floor(y/d), function(err, dbTile) {
+      if (err || !dbTile) {
+        cb(null, tile)
+      } else {
+        cb(null, dbTile)
+      }
+    })
+
+  } else if (z >= MIN_ZOOM ) {
     // Zooming in
-    var tl = createImage(findTile(z + 1, x * 2, y * 2, tile))
-    var tr = createImage(findTile(z + 1, x * 2 + 1, y * 2, tile))
-    var bl = createImage(findTile(z + 1, x * 2, y * 2 + 1, tile))
-    var br = createImage(findTile(z + 1, x * 2 + 1, y * 2 + 1, tile))
-    var size = tl.bitmap.width * 2
-    image = new Jimp(size, size)
-    image.composite(tl, 0, 0)
-    image.composite(tr, size/2, 0)
-    image.composite(bl, 0, size/2)
-    image.composite(br, size/2, size/2)
-    tile = []
-    for (var i = 0; i < image.bitmap.data.length; i++) {
-      tile.push(image.bitmap.data[i])
-    }
+    async.parallel({
+      tl: function(cb) {
+        findTile(db, z + 1, x * 2, y * 2, tile, function(err, dbTile) {
+          cb(err, createImage(dbTile))
+        })
+      },
+      tr: function(cb) {
+        findTile(db, z + 1, x * 2 + 1, y * 2, tile, function(err, dbTile) {
+          cb(err, createImage(dbTile))
+        })
+      },
+      bl: function(cb) {
+        findTile(db, z + 1, x * 2, y * 2 + 1, tile, function(err, dbTile) {
+          cb(err, createImage(dbTile))
+        })
+      },
+      br: function(cb) {
+        findTile(db, z + 1, x * 2 + 1, y * 2 + 1, tile, function(err, dbTile) {
+          cb(err, createImage(dbTile))
+        })
+      },
+    }, function(err, results) {
+      if (err) {
+        return cb(null, tile)
+      }
+      console.log(JSON.stringify(results, null, 2))
+      const size = results.tl.bitmap.width * 2
+      const image = new Jimp(size, size)
+      image.composite(results.tl, 0, 0)
+      image.composite(results.tr, size/2, 0)
+      image.composite(results.bl, 0, size/2)
+      image.composite(results.br, size/2, size/2)
+      tile = []
+      for (let i = 0; i < image.bitmap.data.length; i++) {
+        tile.push(image.bitmap.data[i])
+      }
+      cb(null, tile)
+    })
+
+  } else {
+    cb(null, tile)
   }
-  return tile
 }
 
 module.exports = function(db, req, res) {
-  var zoom = parseInt(req.params.zoom, 10)
-  var x = parseInt(req.params.x, 10)
-  var y = parseInt(req.params.y, 10)
+  const zoom = parseInt(req.params.zoom, 10)
+  const x = parseInt(req.params.x, 10)
+  const y = parseInt(req.params.y, 10)
   console.log(`${zoom}/${x}/${y}`)
-  var tile = findTile(zoom, x, y)
-  if (tile) {
-    var image = createImage(tile)
-    image = resize256(image)
-    image.getBuffer(Jimp.MIME_PNG, function(err, buffer) {
-      if (err) {
-        console.log(err)
-        res.status(404).end()
-      }
-      res.set("Content-Type", Jimp.MIME_JPEG)
-      res.send(buffer)
-    })
-  } else {
-    res.status(404).end()
-  }
+  findTile(db, zoom, x, y, null, function(err, tile) {
+    if (tile) {
+      let image = createImage(tile)
+      image = resize256(image)
+      image.getBuffer(Jimp.MIME_PNG, function(err, buffer) {
+        if (err) {
+          console.log(err)
+          res.status(404).end()
+        }
+        res.set('Content-Type', Jimp.MIME_JPEG)
+        res.send(buffer)
+      })
+    } else {
+      res.status(404).end()
+    }
+  })
 }
