@@ -12,7 +12,7 @@ function getDbTile(db, z, x, y, cb) {
     if (err) {
       console.error(err)
       return cb(err)
-    } else if (err || result.rowCount !== 1) {
+    } else if (result.rowCount !== 1) {
       return cb(new Error('Tile not found'))
     } else {
       return cb(null, result.rows[0].data)
