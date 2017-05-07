@@ -44,4 +44,4 @@ SET search_path = bitdrop;
 ALTER ROLE bitdrop_admin IN DATABASE bitdrop_db SET search_path = bitdrop;
 GRANT USAGE, CREATE ON SCHEMA bitdrop TO bitdrop_admin;
 ```
-Then, import a snapshot, or create the essential tables using the `sb_migrations/latest.sql` script.
+Then, import a snapshot, or create the essential tables using the `db_migrations/latest.sql` script.

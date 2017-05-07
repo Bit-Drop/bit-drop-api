@@ -6,6 +6,9 @@ env(__dirname + '/config/config.env')
 
 const express = require('express')
 const app = express()
+const bodyParser = require('body-parser')
+const db = require('./utils/DbPool')
+const _ = require('lodash')
 
 const Tile = require('./controllers/tile')
 
@@ -15,6 +18,10 @@ app.get('/', (req, res) => {
 
 app.get('/tiles/:zoom/:x/:y.png', (req, res) => {
   Tile(req, res)
+})
+
+app.post('/set-tile', bodyParser.json(), (req, res) => {
+  res.json(_.defaults(req.body, { success: true }))
 })
 
 app.listen(process.env.PORT, () => {
