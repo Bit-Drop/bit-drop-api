@@ -134,7 +134,7 @@ module.exports = function(db, req, res) {
   const zoom = parseInt(req.params.zoom, 10)
   const x = parseInt(req.params.x, 10)
   const y = parseInt(req.params.y, 10)
-  console.log(`${zoom}/${x}/${y}`)
+  console.log('GET', `${zoom}/${x}/${y}`)
   findTile(db, zoom, x, y, null, function(err, tile) {
     if (tile) {
       let image = createImage(tile)

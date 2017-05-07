@@ -47,9 +47,11 @@ function checkRequiredFields(req) {
 }
 
 module.exports = function(db, req, res) {
+  console.log('SET', req.body)
   const errors = checkRequiredFields(req)
   if (errors.length > 0) {
     res.json({ success: false, errors: errors })
+    return
   }
 
   const coords = calcTileXY(req.body.lat, req.body.lon)
