@@ -1,6 +1,7 @@
 const fs = require('fs')
 const Jimp = require('jimp')
 const async = require('async')
+const upsertDb = require('./upsertDb')
 const { isInt } = require('../../utils/Utils')
 
 const MIN_ZOOM = 12
@@ -62,6 +63,25 @@ function resize256(image) {
     image.resize(size, size)
     // image.resize(size, size, Jimp.RESIZE_NEAREST_NEIGHBOR)
   }
+}
+
+function updateCache(db, z, x, y, image) {
+  if (z === MAX_ZOOM) {
+    return
+  }
+  const id = `${z}-${x}-${y}`
+  const path = process.env.CACHE_PATH + id + '.png'
+  image.write(path, function(err) {
+    if (err) {
+      console.error('Failed writing cache file', id, err)
+      return
+    }
+    upsertDb(db, z, x, y, 'file', path, null, true, function(err) {
+      if (err) {
+        console.error(err)
+      }
+    })
+  })
 }
 
 function findTile(db, z, x, y, tile, cb) {
@@ -134,7 +154,7 @@ module.exports = function(db, req, res) {
   const zoom = parseInt(req.params.zoom, 10)
   const x = parseInt(req.params.x, 10)
   const y = parseInt(req.params.y, 10)
-  console.log('GET', `${zoom}/${x}/${y}`)
+  console.log('GET', `${zoom}/${x}/${y}`, req.query.v)
   findTile(db, zoom, x, y, null, function(err, tile) {
     if (tile) {
       let image = createImage(tile)
@@ -146,6 +166,7 @@ module.exports = function(db, req, res) {
         }
         res.set('Content-Type', Jimp.MIME_JPEG)
         res.send(buffer)
+        updateCache(db, zoom, x, y, image)
       })
     } else {
       res.status(404).end()

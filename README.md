@@ -20,6 +20,7 @@ PG_PORT=5432
 PG_USER=
 PG_PASSWORD=
 PG_DB=
+CACHE_PATH=
 ```
 
 #### Database ####
