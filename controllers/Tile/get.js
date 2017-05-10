@@ -8,8 +8,16 @@ const MIN_ZOOM = 12
 const MAX_ZOOM = 16
 const EMPTY_TILE = [255, 255, 255, 0]
 
+function getTileId(z, x, y) {
+  return `${z}-${x}-${y}`
+}
+
+function getTileCachePath(id) {
+  return process.env.CACHE_PATH + id + '.png'
+}
+
 function getDbTile(db, z, x, y, cb) {
-  db.query('SELECT * FROM tiles WHERE id=$1 LIMIT 1', [`${z}-${x}-${y}`], (err, result) => {
+  db.query('SELECT * FROM tiles WHERE id=$1 LIMIT 1', [getTileId(z, x, y)], (err, result) => {
     if (err) {
       console.error(err)
       return cb(err)
@@ -65,12 +73,18 @@ function resize256(image) {
   }
 }
 
+function readCache(db, z, x, y, cb) {
+  const id = getTileId(z, x, y)
+  const path = getTileCachePath(id)
+  Jimp.read(path, cb)
+}
+
 function updateCache(db, z, x, y, image) {
   if (z === MAX_ZOOM) {
     return
   }
-  const id = `${z}-${x}-${y}`
-  const path = process.env.CACHE_PATH + id + '.png'
+  const id = getTileId(z, x, y)
+  const path = getTileCachePath(id)
   image.write(path, function(err) {
     if (err) {
       console.error('Failed writing cache file', id, err)
@@ -84,7 +98,7 @@ function updateCache(db, z, x, y, image) {
   })
 }
 
-function findTile(db, z, x, y, tile, cb) {
+function findTile(db, z, x, y, tile, no_cache, cb) {
   if (!tile) {
     tile = EMPTY_TILE
   }
@@ -92,6 +106,17 @@ function findTile(db, z, x, y, tile, cb) {
   if (z === MAX_ZOOM) {
     getDbTile(db, z, x, y, function(err, dbTile) {
       cb(null, err ? tile : dbTile)
+    })
+
+  } else if (no_cache !== true) {
+    // Try cached image
+    readCache(db, z, x, y, function(err, image) {
+      if (err) {
+        // Cache miss
+        return findTile(db, z, x, y, tile, true, cb)
+      } else {
+        cb(null, image, true)
+      }
     })
 
   } else if (z > MAX_ZOOM) {
@@ -109,22 +134,22 @@ function findTile(db, z, x, y, tile, cb) {
     // Zooming in
     async.parallel({
       tl: function(cb) {
-        findTile(db, z + 1, x * 2, y * 2, tile, function(err, dbTile) {
+        findTile(db, z + 1, x * 2, y * 2, tile, true, function(err, dbTile) {
           cb(err, createImage(dbTile))
         })
       },
       tr: function(cb) {
-        findTile(db, z + 1, x * 2 + 1, y * 2, tile, function(err, dbTile) {
+        findTile(db, z + 1, x * 2 + 1, y * 2, tile, true, function(err, dbTile) {
           cb(err, createImage(dbTile))
         })
       },
       bl: function(cb) {
-        findTile(db, z + 1, x * 2, y * 2 + 1, tile, function(err, dbTile) {
+        findTile(db, z + 1, x * 2, y * 2 + 1, tile, true, function(err, dbTile) {
           cb(err, createImage(dbTile))
         })
       },
       br: function(cb) {
-        findTile(db, z + 1, x * 2 + 1, y * 2 + 1, tile, function(err, dbTile) {
+        findTile(db, z + 1, x * 2 + 1, y * 2 + 1, tile, true, function(err, dbTile) {
           cb(err, createImage(dbTile))
         })
       },
@@ -155,10 +180,15 @@ module.exports = function(db, req, res) {
   const x = parseInt(req.params.x, 10)
   const y = parseInt(req.params.y, 10)
   console.log('GET', `${zoom}/${x}/${y}`, req.query.v)
-  findTile(db, zoom, x, y, null, function(err, tile) {
+  findTile(db, zoom, x, y, null, false, function(err, tile, is_image) {
     if (tile) {
-      let image = createImage(tile)
-      image = resize256(image)
+      let image
+      if (!is_image) {
+        image = createImage(tile)
+        image = resize256(image)
+      } else {
+        image = tile
+      }
       image.getBuffer(Jimp.MIME_PNG, function(err, buffer) {
         if (err) {
           console.log(err)
