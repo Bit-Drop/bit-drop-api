@@ -3,7 +3,7 @@ const moment = require('moment')
 const upsertDb = require('./upsertDb')
 const { hexToRgb } = require('../../utils/Utils')
 
-const MAX_ZOOM = 16
+const MAX_ZOOM = process.env.MAX_ZOOM
 const HEX_OPACITY = 160
 
 function calcTileXY(lat, lon) { 

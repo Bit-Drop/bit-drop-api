@@ -5,7 +5,7 @@ const upsertDb = require('./upsertDb')
 const { isInt } = require('../../utils/Utils')
 
 const MIN_ZOOM = 12
-const MAX_ZOOM = 16
+const MAX_ZOOM = process.env.MAX_ZOOM
 const EMPTY_TILE = [255, 255, 255, 0]
 
 function getTileId(z, x, y) {

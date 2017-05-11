@@ -15,6 +15,7 @@ Running on Node.js, this app exposes an API for the BitDrop app
 ```
 ENV=development
 PORT=3400
+MAX_ZOOM=18
 PG_HOST=localhost
 PG_PORT=5432
 PG_USER=
